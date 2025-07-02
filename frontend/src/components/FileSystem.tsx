@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { FaFolderOpen, FaFileAlt, FaUpload } from 'react-icons/fa';
+import { FaFolderOpen, FaFileAlt, FaUpload, FaRegCopy, FaTimes } from 'react-icons/fa';
 import axios from 'axios';
 
 const FileSystem: React.FC = () => {
@@ -16,6 +16,11 @@ const FileSystem: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [fileContent, setFileContent] = useState<string>('');
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [customFilePath, setCustomFilePath] = useState('');
 
   // Upload zip to backend and fetch file list
   const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,6 +34,8 @@ const FileSystem: React.FC = () => {
       setError(null);
       setZipId('');
       setUploading(true);
+      setFileContent('');
+      setFileError(null);
       try {
         // 1. Upload zip
         const formData = new FormData();
@@ -37,7 +44,6 @@ const FileSystem: React.FC = () => {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         const id = uploadRes.data.zip_filename;
-        console.log("I am id: ", id)
         setZipId(id);
         // 2. Fetch file list
         const listRes = await axios.get(`http://localhost:8000/list-files/${id}`);
@@ -50,22 +56,35 @@ const FileSystem: React.FC = () => {
     }
   };
 
-  const handleSelect = (path: string) => {
+  // Fetch file content when a file is selected
+  const handleSelect = async (path: string) => {
     setSelected(path);
     setResult(null);
     setError(null);
+    setFileContent('');
+    setFileError(null);
+    if (!zipId) return;
+    setFileLoading(true);
+    try {
+      const res = await axios.get(`http://localhost:8000/file/${zipId}/${encodeURIComponent(path)}`);
+      setFileContent(res.data);
+    } catch (err: any) {
+      setFileError('Failed to fetch file content.');
+    } finally {
+      setFileLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!zipId || !selected || !prompt.trim()) return;
+    if (!zipId || !prompt.trim()) return;
     setLoading(true);
     setResult(null);
     setError(null);
     try {
       const formData = new FormData();
       formData.append('zip_filename', zipId);
-      formData.append('file_path', selected);
+      formData.append('file_path', selected || customFilePath || '');
       formData.append('prompt', prompt);
       const res = await axios.post('http://localhost:8000/agent-file', formData);
       setResult(res.data.result);
@@ -74,6 +93,20 @@ const FileSystem: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopy = () => {
+    if (!fileContent) return;
+    navigator.clipboard.writeText(fileContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+
+  // Deselect file
+  const handleDeselect = () => {
+    setSelected(null);
+    setFileContent('');
+    setFileError(null);
   };
 
   return (
@@ -117,6 +150,49 @@ const FileSystem: React.FC = () => {
                     </li>
                   ))}
                 </ul>
+                {/* File viewer */}
+                {selected && (
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-indigo-400 font-semibold text-sm flex items-center gap-2">
+                        <FaFileAlt className="text-indigo-300" />
+                        {selected}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border border-indigo-200 bg-white/60 hover:bg-indigo-100 text-indigo-700 transition active:scale-95 ${copied ? 'bg-green-100 text-green-700 border-green-300' : ''}`}
+                          onClick={handleCopy}
+                          type="button"
+                          disabled={!fileContent}
+                          title="Copy file contents"
+                        >
+                          <FaRegCopy />
+                          {copied ? 'Copied!' : 'Copy'}
+                        </button>
+                        <button
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border border-red-200 bg-white/60 hover:bg-red-100 text-red-700 transition active:scale-95"
+                          onClick={handleDeselect}
+                          type="button"
+                          title="Deselect file"
+                        >
+                          <FaTimes />
+                          Deselect
+                        </button>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900/80 text-green-200 rounded-lg p-3 text-xs font-mono max-h-60 overflow-auto border border-slate-700 shadow-inner transition-all min-h-[60px]">
+                      {fileLoading ? (
+                        <span className="text-indigo-200 animate-pulse">Loading...</span>
+                      ) : fileError ? (
+                        <span className="text-red-400">{fileError}</span>
+                      ) : fileContent ? (
+                        <pre className="whitespace-pre-wrap break-words">{fileContent}</pre>
+                      ) : (
+                        <span className="text-slate-400">No content to display.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -136,18 +212,27 @@ const FileSystem: React.FC = () => {
                   style={{ minHeight: 24 }}>
                   {selected ? `${zipName} / ${selected}` : 'No file selected'}
                 </div>
+                {!selected && (
+                  <Input
+                    className="text-xs px-3 py-2 rounded border border-indigo-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300/40 bg-white/60 placeholder:text-indigo-400 mb-2"
+                    placeholder="Or enter a file path (e.g. folder/file.txt)"
+                    value={customFilePath}
+                    onChange={e => setCustomFilePath(e.target.value)}
+                    disabled={loading}
+                  />
+                )}
               </div>
               <Input
                 className="text-base px-4 py-3 rounded-lg border border-indigo-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300/40 bg-white/60 placeholder:text-indigo-400"
                 placeholder="Enter your prompt..."
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
-                disabled={!selected || loading}
+                disabled={loading}
               />
               <Button
                 type="submit"
                 className="bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-semibold py-3 rounded-lg shadow transition disabled:opacity-60 active:scale-95"
-                disabled={!zipId || !selected || !prompt.trim() || loading}
+                disabled={!zipId || !prompt.trim() || loading}
               >
                 {loading ? 'Processing...' : 'Send to Agent'}
               </Button>

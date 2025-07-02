@@ -9,7 +9,7 @@ function App() {
           <FileSystem />
         </div>
         <div className="absolute bottom-2 left-0 right-0 text-center text-slate-400 text-xs">
-          <span>Powered by Alchemyst AI</span>
+          <span></span>
         </div>
       </div>
     </div>
