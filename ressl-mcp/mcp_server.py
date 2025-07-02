@@ -21,7 +21,6 @@ mcp = FastMCP("RESSL-MCP Server")
     )
 )
 def edit_file(zip_filename: str, file_path: str, new_content: str) -> str:
-    print("I am params of edit:", zip_filename, file_path, new_content)
     """Overwrite the file with new content inside the ZIP."""
     try:
         write_file_to_minio(zip_filename, file_path, new_content)
@@ -39,7 +38,6 @@ def edit_file(zip_filename: str, file_path: str, new_content: str) -> str:
     )
 )
 def create_file(zip_filename: str, file_path: str, content: str) -> str:
-    print("I am params of create:", zip_filename, file_path, content)
     """Create a new file with optional content inside the ZIP. Does not overwrite if exists."""
     try:
         create_file_in_zip_in_minio(zip_filename, file_path, content)
@@ -56,7 +54,6 @@ def create_file(zip_filename: str, file_path: str, content: str) -> str:
     )
 )
 def delete_file(zip_filename: str, file_path: str) -> str:
-    print("I am params of delete:", zip_filename, file_path)
     """Delete a file from inside the ZIP."""
     try:
         delete_file_from_minio(zip_filename, file_path)
