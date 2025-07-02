@@ -1,4 +1,4 @@
-# MCP Server
+# FileOps: MinIO S3 MCP
 
 ## Demo
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-**MCP Server** is a full-stack application for AI-powered file operations on user workspaces, built with:
+**FileOps: MinIO S3 MCP** is a full-stack application for AI-powered file operations on user workspaces, built with:
 
 - **FastAPI** (Python) for the backend API
 - **MinIO** (S3-compatible object storage) for storing user ZIP workspaces and files
