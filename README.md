@@ -4,10 +4,7 @@
 
 A demo of the application is available below:
 
-<video src="demo.webm" controls width="600"></video>
-
-If the video does not display, you can open the `.webm` file in any modern browser or video player to see the application's features in action.
-
+![MCP demo](demo.webm)
 ---
 
 ## Overview
