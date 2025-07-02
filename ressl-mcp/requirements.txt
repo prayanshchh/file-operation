@@ -5,3 +5,5 @@ uvicorn
 httpx
 python-dotenv
 pydantic 
+fastapi
+python-multipart 

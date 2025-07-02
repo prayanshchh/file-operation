@@ -75,6 +75,15 @@ const FileSystem: React.FC = () => {
     }
   };
 
+  const fetchFileList = async (id: string) => {
+    try {
+      const listRes = await axios.get(`http://localhost:8000/list-files/${id}`);
+      setFiles(listRes.data.files || []);
+    } catch (err) {
+      // Optionally handle error
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!zipId || !prompt.trim()) return;
@@ -88,6 +97,8 @@ const FileSystem: React.FC = () => {
       formData.append('prompt', prompt);
       const res = await axios.post('http://localhost:8000/agent-file', formData);
       setResult(res.data.result);
+      // Fetch updated file list after agent action
+      await fetchFileList(zipId);
     } catch (err: any) {
       setError('Error contacting backend.');
     } finally {
