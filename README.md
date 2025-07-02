@@ -2,9 +2,12 @@
 
 ## Demo
 
-A demo of the application is available below:
+[![Watch the demo video](https://img.youtube.com/vi/42wd3MJpGik/0.jpg)](https://youtu.be/42wd3MJpGik)
 
-![MCP demo](demo.webm)
+[▶️ Click here to watch the demo video on YouTube](https://youtu.be/42wd3MJpGik)
+
+If the video does not display, you can open the link above in any browser to see the application's features in action.
+
 ---
 
 ## Overview
@@ -117,9 +120,3 @@ A demo of the application is available below:
 
 - **Backend**: FastAPI, MinIO, httpx, python-dotenv, pydantic, fastmcp, python-multipart, uvicorn
 - **Frontend**: React, Vite, Tailwind CSS, TypeScript, Axios, React Icons
-
----
-
-## License
-
-MIT (or your license here) 
