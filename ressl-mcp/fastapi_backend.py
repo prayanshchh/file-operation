@@ -14,10 +14,20 @@ from minio_utils import (
     create_file_in_zip_in_minio,
 )
 from agent import agent
+from fastapi.middleware.cors import CORSMiddleware
 
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp")
 
 app = FastAPI(title="Zip-to-MinIO backend")
+
+# Allow CORS for local frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/upload-zip")
 async def upload_zip(file: UploadFile = File(...)):
@@ -44,8 +54,8 @@ def get_file(zip_filename: str, file_path: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@app.post("/edit-file")
-async def edit_file(
+@app.post("/agent-file")
+async def agent_file(
     zip_filename: str = Form(...),
     file_path: str = Form(...),
     prompt: str = Form(...)
