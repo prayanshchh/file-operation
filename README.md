@@ -2,11 +2,7 @@
 
 ## Demo
 
-[![Watch the demo video](https://img.youtube.com/vi/42wd3MJpGik/0.jpg)](https://youtu.be/42wd3MJpGik)
-
 [▶️ Click here to watch the demo video on YouTube](https://youtu.be/42wd3MJpGik)
-
-If the video does not display, you can open the link above in any browser to see the application's features in action.
 
 ---
 
