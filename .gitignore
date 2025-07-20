@@ -54,4 +54,6 @@ dist-ssr
 *.sln
 *.sw?
 
+assignment-*.json
+
 # End of Python .gitignore

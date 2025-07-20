@@ -1,161 +1,110 @@
 import os
-from minio import Minio
-from minio.error import S3Error
+from google.cloud import storage
 from typing import List
 import tempfile
 import zipfile
 import io
 import logging
 import uuid
+from dotenv import load_dotenv
+load_dotenv()
 
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-MINIO_BUCKET = os.getenv("MINIO_BUCKET", "mcp-workspaces")
+GCS_BUCKET = os.getenv("GCS_BUCKET")
 
-minio_client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=False
-)
+gcs_client = None
+bucket = None
 
-logger = logging.getLogger("minio_utils")
+logger = logging.getLogger("gcs_utils")
 
-def upload_file_to_minio(zip_filename: str, file_path: str, local_path: str):
-    logger.info(f"[upload_file_to_minio] Uploading {local_path} to {zip_filename}/{file_path}")
-    minio_path = f"{zip_filename}/{file_path}"
-    minio_client.fput_object(MINIO_BUCKET, minio_path, local_path)
-    logger.info(f"[upload_file_to_minio] Uploaded {local_path} to {minio_path}")
+def _ensure_client_initialized():
+    """Initialize GCS client if not already done"""
+    global gcs_client, bucket
+    if gcs_client is None:
+        try:
+            gcs_client = storage.Client()
+            bucket = gcs_client.bucket(GCS_BUCKET)
+        except Exception as e:
+            print(f"Warning: Could not initialize Google Cloud Storage client: {e}")
+            print("Please set up authentication using one of these methods:")
+            print("1. Set GOOGLE_APPLICATION_CREDENTIALS environment variable")
+            print("2. Run 'gcloud auth application-default login'")
+            print("3. Use service account key file")
+            raise Exception("Google Cloud Storage client not initialized")
 
-def list_files_in_minio(zip_filename: str, prefix: str = "") -> list:
-    # List files inside the zip file in MinIO
-    minio_path = zip_filename
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
+# GCS function names
+def upload_zip_to_gcs(zip_path: str) -> str:
+    """Upload a zip file to GCS and return the filename"""
+    _ensure_client_initialized()
+    zip_uuid = str(uuid.uuid4()) + ".zip"
+    blob = bucket.blob(zip_uuid)
+    blob.upload_from_filename(zip_path)
+    return zip_uuid
+
+def list_files_in_gcs(zip_filename: str, prefix: str = "") -> list:
+    """List files inside a zip stored in GCS"""
+    _ensure_client_initialized()
+    blob = bucket.blob(zip_filename)
     with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
+        blob.download_to_filename(tmp_zip.name)
         with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
             file_list = [f for f in zip_ref.namelist() if f.startswith(prefix)] if prefix else zip_ref.namelist()
-    response.close()
-    response.release_conn()
     return file_list
 
-def read_file_from_minio(zip_filename: str, file_path: str) -> str:
+def read_file_from_gcs(zip_filename: str, file_path: str) -> str:
+    """Read a file from inside a zip stored in GCS"""
+    _ensure_client_initialized()
     content = ""
-    # Read file content from zip file in MinIO
-    minio_path = zip_filename
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
+    blob = bucket.blob(zip_filename)
     with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
+        blob.download_to_filename(tmp_zip.name)
         with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
-            # Normalize file_path for comparison
             file_list = zip_ref.namelist()
             print("I am file_List: ", file_list)
             if file_path not in file_list:
-                response.close()
-                response.release_conn()
                 return "file doesn't exist"
             with zip_ref.open(file_path) as f:
                 content = f.read().decode()
-    response.close()
-    response.release_conn()
     return content
 
-def write_file_to_minio(zip_filename: str, file_path: str, content: str):
-    """
-    Overwrite (erase all content and write new content) the specified file inside the zip in MinIO.
-    """
-    # Use apply_llm_edits_to_minio to replace the file
-    apply_llm_edits_to_minio(zip_filename, [{
+def write_file_to_gcs(zip_filename: str, file_path: str, content: str):
+    """Write a file to inside a zip stored in GCS"""
+    _ensure_client_initialized()
+    apply_llm_edits_to_gcs(zip_filename, [{
         "file": file_path,
         "action": "replace",
         "content": content,
     }])
 
-def append_to_file_in_minio(zip_filename: str, file_path: str, extra: str):
-    """
-    Append content to a file inside a zip in MinIO. If the file does not exist, create it with the content.
-    """
-    files = list_files_in_minio(zip_filename)
-    if file_path in files:
-        current_content = read_file_from_minio(zip_filename, file_path)
-        new_content = current_content + extra
-    else:
-        new_content = extra
-    # Use apply_llm_edits_to_minio to replace the file
-    apply_llm_edits_to_minio(zip_filename, [{
-        "file": file_path,
-        "action": "replace",
-        "content": new_content,
-    }])
-
-def delete_file_from_minio(zip_filename: str, file_path: str):
-    """
-    Delete a file from inside a zip in MinIO.
-    """
-    minio_path = zip_filename
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
+def delete_file_from_gcs(zip_filename: str, file_path: str):
+    """Delete a file from inside a zip stored in GCS"""
+    _ensure_client_initialized()
+    blob = bucket.blob(zip_filename)
     with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
+        blob.download_to_filename(tmp_zip.name)
         original_zip_path = tmp_zip.name
-    response.close()
-    response.release_conn()
-
-    # Prepare a new ZIP without the file to be deleted
     with tempfile.NamedTemporaryFile(delete=False) as new_zip_file:
         with zipfile.ZipFile(original_zip_path, 'r') as zin, \
              zipfile.ZipFile(new_zip_file.name, 'w') as zout:
             for item in zin.infolist():
                 if item.filename != file_path:
                     zout.writestr(item, zin.read(item.filename))
+    blob.upload_from_filename(new_zip_file.name)
 
-    # Overwrite the old zip in MinIO with the new one
-    minio_client.fput_object(MINIO_BUCKET, minio_path, new_zip_file.name)
-
-def upload_zip_to_minio(zip_path: str) -> str:
-    """Upload a zip file to MinIO root with a UUID filename. Returns the zip filename."""
-    zip_uuid = str(uuid.uuid4()) + ".zip"
-    minio_path = zip_uuid
-    minio_client.fput_object(MINIO_BUCKET, minio_path, zip_path)
-    return zip_uuid
-
-def extract_zip_from_minio(workspace_id: str, extract_to: str):
-    minio_path = f"{workspace_id}/archive.zip"
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
+def apply_llm_edits_to_gcs(zip_filename: str, instructions: list):
+    """Apply LLM edits to files inside a zip stored in GCS"""
+    _ensure_client_initialized()
+    blob = bucket.blob(zip_filename)
     with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
-        with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
-            zip_ref.extractall(extract_to)
-    response.close()
-    response.release_conn()
-
-def apply_llm_edits_to_minio(zip_filename: str, instructions: list):
-    minio_path = zip_filename
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
+        blob.download_to_filename(tmp_zip.name)
         original_zip_path = tmp_zip.name
-    response.close()
-    response.release_conn()
-
     with tempfile.NamedTemporaryFile(delete=False) as new_zip_file:
         with zipfile.ZipFile(original_zip_path, 'r') as zin, \
              zipfile.ZipFile(new_zip_file.name, 'w') as zout:
-            # Build a set of files to be replaced or deleted
             replace_map = {instr['file']: instr for instr in instructions if instr['action'] in ('replace', 'append')}
             delete_set = {instr['file'] for instr in instructions if instr['action'] == 'delete'}
-
-            # Copy over all files except those being replaced or deleted
             for item in zin.infolist():
                 if item.filename not in replace_map and item.filename not in delete_set:
                     zout.writestr(item, zin.read(item.filename))
-
-            # Add/replace files
             for instr in instructions:
                 if instr['action'] == 'replace':
                     zout.writestr(instr['file'], instr['content'])
@@ -165,48 +114,15 @@ def apply_llm_edits_to_minio(zip_filename: str, instructions: list):
                     except KeyError:
                         old_content = ''
                     zout.writestr(instr['file'], old_content + instr['content'])
-                # 'delete' is handled by not copying the file
+    blob.upload_from_filename(new_zip_file.name)
 
-    # Delete the old zip from MinIO
-    minio_client.remove_object(MINIO_BUCKET, minio_path)
-    minio_client.fput_object(MINIO_BUCKET, minio_path, new_zip_file.name)
-
-def list_files_in_zip_from_minio(workspace_id: str) -> list:
-    minio_path = f"{workspace_id}/archive.zip"
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
+def create_file_in_zip_in_gcs(zip_filename: str, file_path: str, content: str = ""):
+    """Create a new file inside a zip stored in GCS"""
+    _ensure_client_initialized()
+    blob = bucket.blob(zip_filename)
     with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
-        with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
-            file_list = zip_ref.namelist()
-    response.close()
-    response.release_conn()
-    return file_list
-
-def read_file_from_zip_in_minio(workspace_id: str, file_path: str) -> str:
-    minio_path = f"{workspace_id}/archive.zip"
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
-        with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
-            with zip_ref.open(file_path) as f:
-                content = f.read().decode()
-    response.close()
-    response.release_conn()
-    return content
-
-def create_file_in_zip_in_minio(zip_filename: str, file_path: str, content: str = ""):
-    minio_path = zip_filename
-    response = minio_client.get_object(MINIO_BUCKET, minio_path)
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
-        tmp_zip.write(response.read())
-        tmp_zip.flush()
+        blob.download_to_filename(tmp_zip.name)
         original_zip_path = tmp_zip.name
-    response.close()
-    response.release_conn()
-
-    # Prepare a new ZIP with the new file added (if it doesn't exist)
     with tempfile.NamedTemporaryFile(delete=False) as new_zip_file:
         with zipfile.ZipFile(original_zip_path, 'r') as zin, \
              zipfile.ZipFile(new_zip_file.name, 'w') as zout:
@@ -217,5 +133,51 @@ def create_file_in_zip_in_minio(zip_filename: str, file_path: str, content: str 
                     file_exists = True
             if not file_exists:
                 zout.writestr(file_path, content)
+    blob.upload_from_filename(new_zip_file.name)
 
-    minio_client.fput_object(MINIO_BUCKET, minio_path, new_zip_file.name) 
+# Additional GCS functions
+def upload_file_to_gcs(zip_filename: str, file_path: str, local_path: str):
+    logger.info(f"[upload_file_to_gcs] Uploading {local_path} to {zip_filename}/{file_path}")
+    _ensure_client_initialized()
+    blob = bucket.blob(zip_filename)
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
+        if blob.exists():
+            blob.download_to_filename(tmp_zip.name)
+        with zipfile.ZipFile(tmp_zip.name, 'a') as zipf:
+            zipf.write(local_path, arcname=file_path)
+    blob.upload_from_filename(tmp_zip.name)
+    logger.info(f"[upload_file_to_gcs] Uploaded {local_path} to {zip_filename}/{file_path}")
+
+def append_to_file_in_gcs(zip_filename: str, file_path: str, content: str):
+    apply_llm_edits_to_gcs(zip_filename, [{
+        "file": file_path,
+        "action": "append",
+        "content": content,
+    }])
+
+def extract_zip_from_gcs(workspace_id: str, extract_to: str):
+    _ensure_client_initialized()
+    blob = bucket.blob(f"{workspace_id}/archive.zip")
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
+        blob.download_to_filename(tmp_zip.name)
+        with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
+            zip_ref.extractall(extract_to)
+
+def list_files_in_zip_from_gcs(workspace_id: str) -> list:
+    _ensure_client_initialized()
+    blob = bucket.blob(f"{workspace_id}/archive.zip")
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
+        blob.download_to_filename(tmp_zip.name)
+        with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
+            file_list = zip_ref.namelist()
+    return file_list
+
+def read_file_from_zip_in_gcs(workspace_id: str, file_path: str) -> str:
+    _ensure_client_initialized()
+    blob = bucket.blob(f"{workspace_id}/archive.zip")
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_zip:
+        blob.download_to_filename(tmp_zip.name)
+        with zipfile.ZipFile(tmp_zip.name, 'r') as zip_ref:
+            with zip_ref.open(file_path) as f:
+                content = f.read().decode()
+    return content 

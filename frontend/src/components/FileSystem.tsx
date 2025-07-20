@@ -3,7 +3,7 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { FaFolderOpen, FaFileAlt, FaUpload, FaRegCopy, FaTimes } from 'react-icons/fa';
-import axios from 'axios';
+import api from '../api';
 
 const FileSystem: React.FC = () => {
   const [zipFile, setZipFile] = useState<File | null>(null);
@@ -40,13 +40,13 @@ const FileSystem: React.FC = () => {
         // 1. Upload zip
         const formData = new FormData();
         formData.append('file', file);
-        const uploadRes = await axios.post('http://localhost:8000/upload-zip', formData, {
+        const uploadRes = await api.post('/upload-zip', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         const id = uploadRes.data.zip_filename;
         setZipId(id);
         // 2. Fetch file list
-        const listRes = await axios.get(`http://localhost:8000/list-files/${id}`);
+        const listRes = await api.get(`/list-files/${id}`);
         setFiles(listRes.data.files || []);
       } catch (err: any) {
         setError('Failed to upload or list files.');
@@ -66,7 +66,7 @@ const FileSystem: React.FC = () => {
     if (!zipId) return;
     setFileLoading(true);
     try {
-      const res = await axios.get(`http://localhost:8000/file/${zipId}/${encodeURIComponent(path)}`);
+      const res = await api.get(`/file/${zipId}/${encodeURIComponent(path)}`);
       setFileContent(res.data);
     } catch (err: any) {
       setFileError('Failed to fetch file content.');
@@ -77,7 +77,7 @@ const FileSystem: React.FC = () => {
 
   const fetchFileList = async (id: string) => {
     try {
-      const listRes = await axios.get(`http://localhost:8000/list-files/${id}`);
+      const listRes = await api.get(`/list-files/${id}`);
       setFiles(listRes.data.files || []);
     } catch (err) {
       // Optionally handle error
@@ -95,7 +95,7 @@ const FileSystem: React.FC = () => {
       formData.append('zip_filename', zipId);
       formData.append('file_path', selected || customFilePath || '');
       formData.append('prompt', prompt);
-      const res = await axios.post('http://localhost:8000/agent-file', formData);
+      const res = await api.post('/agent-file', formData);
       setResult(res.data.result);
       // Fetch updated file list after agent action
       await fetchFileList(zipId);

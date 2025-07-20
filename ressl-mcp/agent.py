@@ -60,7 +60,6 @@ async def ensure_session() -> None:
             data = _parse_sse_for_json(rsp.text)
         # Convert to OpenAI tool schema
         _tools_cache = [_to_openai(t) for t in data["result"]["tools"]]
-        print("Tool list fetched from MCP server:", json.dumps(_tools_cache, indent=2))
 
 
 async def rpc(method: str, params: dict | None = None, *, rid=1):
@@ -134,7 +133,7 @@ async def agent(
                 # inject defaults the LLM might omit
                 params["zip_filename"] = zip_filename 
                 params["file_path"]   = file_path
-
+                #rpc call
                 result = await call_tool(call.function.name, params, rid=call.id)
 
                 messages.append({

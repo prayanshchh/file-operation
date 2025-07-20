@@ -1,5 +1,5 @@
 fastmcp
-minio
+google-cloud-storage
 
 uvicorn
 httpx
